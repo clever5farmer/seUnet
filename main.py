@@ -1,4 +1,5 @@
 import torch
+import torch.optim as optim
 from unet import UNet
 
 if __name__ == '__main__':
