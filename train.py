@@ -1,8 +1,11 @@
+import copy
 import torch
+import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 from tqdm import tqdm
 from loss import DiceLoss
+from torch.utils.data import DataLoader, random_split
 #from unet import UNet
 
 def dsc_per_volume(validation_pred, validation_true, patient_slice_index):
@@ -17,40 +20,63 @@ def dsc_per_volume(validation_pred, validation_true, patient_slice_index):
     return dsc_list
 
 
-def train(model, device, train_dataloader, epochs=100):
+def train(
+        model, 
+        device, 
+        dataset,
+        batch_size: int = 1,
+        epochs=100):
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
-    train_loss = [] # loss of every data in each epoch 
-    valid_loss = []
-    train_epochs_loss = [] # average loss of each epoch
-    valid_epochs_loss = []
+    val_percent = 0.33
+    val_size = int(len(dataset)*val_percent)
+    train_size = len(dataset) - val_size
+    train_set, val_set = random_split(
+        dataset, 
+        [train_size, val_size], 
+        generator=torch.Generator().manual_seed(0)) # 该生成器设置的种子使每次运行该文件都会产生同样的分组
+    train_loader = DataLoader(
+        train_set, batch_size=batch_size, drop_last=False, num_workers=1
+    )
+    val_loader = DataLoader(
+        val_set, batch_size=batch_size, drop_last=False, num_workers=1
+    )
+    # train_epochs_loss = 0 # average loss of each epoch
     step = 0
+    criterion = nn.CrossEntropyLoss()
     dsc_loss = DiceLoss()
-    for epoch in tqdm(range(epochs)):
+    best_model_wts = copy.deepcopy(model.state_dict())
+    best_loss = 1e10
+    for epoch in range(1, epochs+1):
+    #for epoch in tqdm(range(epochs), total=epochs):
+        train_loss = 0 # loss of every data in each epoch 
         model.train()
-        train_epoch_loss = []
-        for i, data in enumerate(train_dataloader):
-            x, y_true = data
-            x, y_true = x.to(device), y_true.to(device)
-            y_pred = model(x)
-            optimizer.zero_grad()
-            loss = dsc_loss(y_pred, y_true)
-            loss.backward()
-            optimizer.step()
-            train_epoch_loss.append(loss.item())
-            train_loss.append(loss.item())
-            if i%(len(train_dataloader)//4)==0:
-                print("epoch={}/{},{}/{}of train, loss={}".format(
-                    epoch, epochs, i, len(train_dataloader),loss.item()))
-        train_epochs_loss.append(np.average(train_epoch_loss))
+        with tqdm(total=train_size, desc=f'Epoch {epoch}/{epochs}', unit='img') as pbar:
+            for batch in train_loader:
+                x, y_true = batch
+                x, y_true = x.to(device), y_true.to(device)
+                y_pred = model(x)
+                optimizer.zero_grad()
+                loss = criterion(y_pred, y_true)
+                loss.backward()
+                optimizer.step()
+                train_loss+=loss.item()
+        train_epoch_loss = train_loss/len(train_loader)
+        print("\n epoch: {}, train_loss: {:.4f}".format(epoch, train_epoch_loss))
 
         #=============valid==============
         model.eval()
-        valid_epoch_loss = []
-        for i, data in enumerate(train_dataloader):
-            x, y_true = data
-            x, y_true = x.to(device), y_true.to(device)
-            y_pred = model(x)
-            loss = dsc_loss(y_pred, y_true)
-            valid_epoch_loss.append(loss.item())
-            valid_loss.append(loss.item())
-        valid_epochs_loss.append(np.average(valid_epoch_loss))
+        valid_loss = 0
+        with torch.no_grad():
+            for batch in val_loader:
+                x, y_true = batch
+                x, y_true = x.to(device), y_true.to(device)
+                y_pred = model(x)
+                loss = criterion(y_pred, y_true)
+                valid_loss+=loss.item()
+        valid_epoch_loss = valid_loss/len(val_loader)
+        print("\n epoch: {}, val_loss: {:.4f}".format(epoch, valid_epoch_loss))
+        if valid_epoch_loss < best_loss:
+            best_loss = valid_epoch_loss
+            best_model_wts = copy.deepcopy(model.state_dict())
+    model.load_state_dict(best_model_wts)
+    return model
