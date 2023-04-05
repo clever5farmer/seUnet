@@ -1,5 +1,6 @@
 import os
 import torch
+import cv2
 import numpy as np
 import preprocess as prep
 from torch.utils.data import Dataset
@@ -14,9 +15,8 @@ def data_loader(dataset_dir, flag='train', batch_size=1):
     )
     return loader
 
-class SegmentationDataset(Dataset):
+class ImgageSet:
     def __init__(self, dataset_dir) -> None:
-
         originalImgDir = os.path.join(dataset_dir, 'original/image')
         featureRootDir = os.path.join(dataset_dir, 'feature/Original')
         labelRootDir = os.path.join(dataset_dir, 'original/label/')
@@ -25,7 +25,7 @@ class SegmentationDataset(Dataset):
         labelImgList, _ = prep.readImages(labelRootDir)
         dataSize = len(imgList)
         imgSize = np.shape(imgList)[-2:]
-        multiChannelImages = np.zeros((dataSize,len(InputFeature),imgSize[0],imgSize[1]))
+        multiChannelImages = np.zeros((dataSize,imgSize[0],imgSize[1],len(InputFeature)))
         i=0
         for inputFeature in InputFeature:
             featureVal = inputFeature.value
@@ -34,14 +34,51 @@ class SegmentationDataset(Dataset):
             imgList, fileNameList = prep.readImages(imgPath)
             prep.stackChannelImages(multiChannelImages, imgList, i)
             i+=1
-        self.transform = transforms.Compose([
-            transforms.ToTensor() # 0-255 -> 0-1, dimensions (H, W, C) -> (C, H, W)
-        ])
         self.multiChannelImages = multiChannelImages
         self.rawImages = imgList
         self.labelImages = labelImgList
         self.labelImages = self.labelImages[..., np.newaxis]
         self.fileNames = fileNameList
+
+class SegmentationDataset(Dataset):
+    def __init__(self, image_set: ImgageSet, set_slice, flag = 'test') -> None:
+        NEGATIVENUM = 39
+        set_shape = np.shape(image_set.multiChannelImages)
+        n = set_shape[0]
+        self.set_size = (set_slice[0][1]-set_slice[0][0])+(set_slice[1][1]-set_slice[1][0])
+        if flag == 'train':
+            self.set_size = n-self.set_size
+        self.multiChannelImages = np.zeros((self.set_size,set_shape[1],set_shape[2],len(InputFeature)))
+        self.labelImages = np.zeros((self.set_size,set_shape[1],set_shape[2],1))
+        if flag == 'test':
+            id = 0
+            for i in range(n):
+                if i < NEGATIVENUM:
+                    if set_slice[0][0] <= i < set_slice[0][1]:
+                        self.multiChannelImages[id] = image_set.multiChannelImages[i]
+                        self.labelImages[id] = image_set.labelImages[i]
+                        id+=1
+                if i >= NEGATIVENUM:
+                    if set_slice[1][0] <= i-NEGATIVENUM < set_slice[1][1]:
+                        self.multiChannelImages[id] = image_set.multiChannelImages[i-NEGATIVENUM]
+                        self.labelImages[id] = image_set.labelImages[i-NEGATIVENUM]
+                        id+=1
+        else:
+            id = 0
+            for i in range(n):
+                if i < NEGATIVENUM:
+                    if not(set_slice[0][0] <= i < set_slice[0][1]):
+                        self.multiChannelImages[id] = image_set.multiChannelImages[i]
+                        self.labelImages[id] = image_set.labelImages[i]
+                        id+=1
+                if i >= NEGATIVENUM:
+                    if not(set_slice[1][0] <= i-NEGATIVENUM < set_slice[1][1]):
+                        self.multiChannelImages[id] = image_set.multiChannelImages[i-NEGATIVENUM]
+                        self.labelImages[id] = image_set.labelImages[i-NEGATIVENUM]
+                        id+=1
+        self.transform = transforms.Compose([
+                transforms.ToTensor() # 0-255 -> 0-1, dimensions (H, W, C) -> (C, H, W)
+        ])
         '''
         self.multiChannelImages = multiChannelImages / np.double(255) # dimensions (N, C, H, W)
         self.rawImages = imgList / np.double(255)
@@ -52,11 +89,11 @@ class SegmentationDataset(Dataset):
         '''
 
     def __len__(self):
-        return len(self.fileNames)
+        return self.set_size
     
     def __getitem__(self, index):
-        image = self.multiChannelImages[index] # dimensions (C, H, W)
-        label = self.labelImages[index] # dimensions (C, H, W)
+        image = self.multiChannelImages[index].astype(np.uint8) # dimensions (H, W, C)
+        label = self.labelImages[index].astype(np.uint8) # dimensions (H, W, C)
         #image_tensor = torch.from_numpy(image.astype(np.float32))
         #label_tensor = torch.from_numpy(label.astype(np.float32))
         image_tensor = self.transform(image)

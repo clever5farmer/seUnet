@@ -52,10 +52,10 @@ class UNet(nn.Module):
         enc2 = self.encoder2(pool1)
         pool2 = UNet._maxPool2dSame(enc2, 2)
 
-        enc3 = self.encoder2(pool2)
+        enc3 = self.encoder3(pool2)
         pool3 = UNet._maxPool2dSame(enc3, 2)
 
-        enc4 = self.encoder2(pool3)
+        enc4 = self.encoder4(pool3)
         pool4 = UNet._maxPool2dSame(enc4, 2)
 
         bottom = self.bottom(pool4)

@@ -81,7 +81,7 @@ def createFeatureImages(imgList, featureDir, fileNameList, augMode = 'Original')
         # WriteFile.save_images(groupFeatureDir, imageNameList, featureImgList)
 
 def stackChannelImages(multiChannelImages, imgArr, index):
-    multiChannelImages[:,index,:,:] = imgArr
+    multiChannelImages[:,:,:,index] = imgArr
 
 def initializeMultiChannelImgs(featureDir):
     multiChannelImgs = []

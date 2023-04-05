@@ -12,15 +12,16 @@ def predict(
     test_loader = DataLoader(
         dataset, batch_size=1, drop_last=False, num_workers=1
     )
-    activator = torch.nn.Sigmoid()
+    #activator = torch.nn.Sigmoid()
     pred_images = np.zeros((len(dataset), img_size, img_size))
     mask_images = np.zeros((len(dataset), img_size, img_size))
     with torch.no_grad():
             for i, batch in enumerate(test_loader):
                 x, _ = batch
-                x= x.to(device)
+                x= x.to(device, dtype=torch.float)
                 y_pred = model(x).cpu()
-                mask = activator(y_pred) > out_threshold
+                #mask = activator(y_pred) > out_threshold
+                mask = y_pred > out_threshold
                 pred_images[i,:,:]=y_pred.numpy()
                 mask_images[i,:,:]=mask.numpy()
     return pred_images, mask_images

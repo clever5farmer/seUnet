@@ -1,7 +1,9 @@
 import copy
+import cv2
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torchsummary import summary
 import numpy as np
 from tqdm import tqdm
 from loss import DiceLoss
@@ -26,6 +28,7 @@ def train(
         dataset,
         batch_size: int = 1,
         epochs=100):
+    summary(model, input_size=(4,256,256))
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
     val_percent = 0.33
     val_size = int(len(dataset)*val_percent)
@@ -42,7 +45,8 @@ def train(
     )
     # train_epochs_loss = 0 # average loss of each epoch
     step = 0
-    criterion = nn.CrossEntropyLoss()
+    #criterion = nn.CrossEntropyLoss()
+    criterion = nn.BCELoss()
     dsc_loss = DiceLoss()
     best_model_wts = copy.deepcopy(model.state_dict())
     best_loss = 1e10
@@ -53,13 +57,18 @@ def train(
         with tqdm(total=train_size, desc=f'Epoch {epoch}/{epochs}', unit='img') as pbar:
             for batch in train_loader:
                 x, y_true = batch
-                x, y_true = x.to(device), y_true.to(device)
+                x, y_true = x.to(device=device, dtype=torch.float), y_true.to(device=device, dtype=torch.float)
                 y_pred = model(x)
                 optimizer.zero_grad()
                 loss = criterion(y_pred, y_true)
+                #cv2.imwrite('/home/luosj/research/test/seUnet/pred.png',y_pred.cpu().detach().numpy())
+                #cv2.imwrite('/home/luosj/research/test/seUnet/true.png',y_true.cpu().detach().numpy())
+                #print(loss.item())
+                #print(np.max(y_true.cpu().detach().numpy()))
                 loss.backward()
                 optimizer.step()
                 train_loss+=loss.item()
+                pbar.update(1)
         train_epoch_loss = train_loss/len(train_loader)
         print("\n epoch: {}, train_loss: {:.4f}".format(epoch, train_epoch_loss))
 
@@ -69,7 +78,7 @@ def train(
         with torch.no_grad():
             for batch in val_loader:
                 x, y_true = batch
-                x, y_true = x.to(device), y_true.to(device)
+                x, y_true = x.to(device, dtype=torch.float), y_true.to(device, dtype=torch.float)
                 y_pred = model(x)
                 loss = criterion(y_pred, y_true)
                 valid_loss+=loss.item()
