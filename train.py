@@ -87,5 +87,5 @@ def train(
         if valid_epoch_loss < best_loss:
             best_loss = valid_epoch_loss
             best_model_wts = copy.deepcopy(model.state_dict())
-    model.load_state_dict(best_model_wts)
+    #model.load_state_dict(best_model_wts)
     return model

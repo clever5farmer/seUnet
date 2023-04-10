@@ -8,6 +8,7 @@ import torch.optim as optim
 import numpy as np
 import train
 from unet import UNet
+from se_unet import SEUnet
 from evaluation import save_eval_result, SummerizeResults
 
 KCONST = 3
@@ -44,6 +45,30 @@ def get_set_slice(KConst, NSize, PSize, Round):
         posSliceList.append([oldPosID, posID])
     return negSliceList[Round], posSliceList[Round]
 
+def train_by_model(model, model_name, round):
+    image_set = dl.ImgageSet(dataset_dir='../dataset')
+    test_slice = get_set_slice(KCONST, NEGATIVENUM, POSITIVENUM, round)
+    train_dataset = dl.SegmentationDataset(image_set, test_slice, flag='train')
+    test_dataset = dl.SegmentationDataset(image_set, test_slice, flag='test')
+    model = train.train(model, device, train_dataset)
+    # test
+    pred_img, mask_img = prediction.predict(model, test_dataset, device)
+    label_img = np.concatenate((image_set.labelImages[slice(test_slice[0][0], test_slice[0][1])], 
+                                image_set.labelImages[slice(test_slice[1][0], test_slice[1][1])]),
+                                axis=0)
+    fileName_set = image_set.fileNames[slice(test_slice[0][0], test_slice[0][1])]+image_set.fileNames[slice(test_slice[1][0], test_slice[1][1])]
+    test_raw_img = np.concatenate((image_set.rawImages[slice(test_slice[0][0], test_slice[0][1])], 
+                                image_set.rawImages[slice(test_slice[1][0], test_slice[1][1])]),
+                                axis=0)
+    subResDir = os.path.join(resultDir, 'iteration '+str(round), model_name)
+    meanPrec, meanReca, meanFmea = save_eval_result(predict_image=pred_img*255.0,
+                                                    gt_image=label_img,
+                                                    test_filenames=fileName_set,
+                                                    resDir=subResDir,
+                                                    mask_image=mask_img,
+                                                    overlay_on=True,
+                                                    ori_image=test_raw_img)
+
 if __name__ == '__main__':
     os.makedirs(resultDir, exist_ok=True)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -52,32 +77,18 @@ if __name__ == '__main__':
     # split dataset
     for i in range(KCONST):
         # train_dataset
-        np.set_printoptions(threshold=sys.maxsize)
-        image_set = dl.ImgageSet(dataset_dir='../dataset')
-        test_slice = get_set_slice(KCONST, NEGATIVENUM, POSITIVENUM, i)
-        train_dataset = dl.SegmentationDataset(image_set, test_slice, flag='train')
-        test_dataset = dl.SegmentationDataset(image_set, test_slice, flag='test')
+        #np.set_printoptions(threshold=sys.maxsize)
         # test_dataset
         # train
         # print((image_set.labelImages[0,:,:,0]))
+        # model = UNet(4, 1)
+        '''
+        model = SEUnet(4, 1)
+        model = model.to(device=device)
+        train_by_model(model, 'SEUnet', i)
+        '''
         model = UNet(4, 1)
         model = model.to(device=device)
-        model = train.train(model, device, train_dataset)
-        # test
-        pred_img, mask_img = prediction.predict(model, test_dataset, device)
-        label_img = np.concatenate((image_set.labelImages[slice(test_slice[0][0], test_slice[0][1])], 
-                                    image_set.labelImages[slice(test_slice[1][0], test_slice[1][1])]),
-                                    axis=0)
-        fileName_set = image_set.fileNames[slice(test_slice[0][0], test_slice[0][1])]+image_set.fileNames[slice(test_slice[1][0], test_slice[1][1])]
-        test_raw_img = np.concatenate((image_set.rawImages[slice(test_slice[0][0], test_slice[0][1])], 
-                                    image_set.rawImages[slice(test_slice[1][0], test_slice[1][1])]),
-                                    axis=0)
-        meanPrec, meanReca, meanFmea = save_eval_result(predict_image=pred_img*255.0,
-                                                        gt_image=label_img,
-                                                        test_filenames=fileName_set,
-                                                        resDir=resultDir,
-                                                        mask_image=mask_img,
-                                                        overlay_on=True,
-                                                        ori_image=test_raw_img)
+        train_by_model(model, 'Unet', i)
 
     # pytorch的unet复现源码大部分上采样用的是反卷积
