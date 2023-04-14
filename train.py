@@ -28,7 +28,7 @@ def train(
         dataset,
         batch_size: int = 1,
         epochs=100):
-    summary(model, input_size=(4,256,256))
+    #summary(model, input_size=(4,256,256))
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
     val_percent = 0.33
     val_size = int(len(dataset)*val_percent)

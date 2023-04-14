@@ -32,6 +32,7 @@ class SEBasicBlock(nn.Module):
         out = self.relu1(out)
         out = self.conv2(out)
         out = self.batchnorm2(out)
+        out = self.se(out)
         out = self.relu2(out)
         return out
     

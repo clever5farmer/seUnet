@@ -8,10 +8,10 @@ import torch.optim as optim
 import numpy as np
 import train
 from unet import UNet
-from se_unet import SEUnet
+from se_unet import SEUnet, SEinFirstUnet
 from evaluation import save_eval_result, SummerizeResults
 
-KCONST = 3
+KCONST = 5
 NEGATIVENUM = 39
 POSITIVENUM = 19
 '''
@@ -82,11 +82,12 @@ if __name__ == '__main__':
         # train
         # print((image_set.labelImages[0,:,:,0]))
         # model = UNet(4, 1)
-        '''
         model = SEUnet(4, 1)
         model = model.to(device=device)
         train_by_model(model, 'SEUnet', i)
-        '''
+        model = SEinFirstUnet(4, 1)
+        model = model.to(device=device)
+        train_by_model(model, 'singleSEUnet', i)
         model = UNet(4, 1)
         model = model.to(device=device)
         train_by_model(model, 'Unet', i)
